@@ -37,6 +37,11 @@ static uint32_t uboot_entry = 0; /* entry point (address) of U-Boot */
 static uint32_t uboot_size  = 0; /* size of U-Boot binary */
 static bool enter_in_aarch64 = false;
 
+static enum {
+    WB_WATCHDOG_UNHANDLED = 0,
+    WB_WATCHDOG_WB72
+} wb_watchdog_mode = WB_WATCHDOG_UNHANDLED;
+
 /* printf-style output, but only if "verbose" flag is active */
 #define pr_info(...) \
 	do { if (verbose) printf(__VA_ARGS__); } while (0);
@@ -144,7 +149,7 @@ static void set_gpio(feldev_handle *dev, int bank, int pin, int value)
 	aw_fel_write_buffer(dev, &reg_val,offset, sizeof(reg_val), false);
 }
 
-static void watchdog_toggle(feldev_handle *dev) {
+static void watchdog_toggle_wb72(feldev_handle *dev) {
 	static int state = 0;
 	state = !state;
 
@@ -181,7 +186,10 @@ double aw_write_buffer(feldev_handle *dev, void *buf, uint32_t offset,
 		len -= chunk;
 		buf += chunk;
 		offset += chunk;
-		watchdog_toggle(dev);
+
+		if (wb_watchdog_mode == WB_WATCHDOG_WB72) {
+			watchdog_toggle_wb72(dev);
+		}
 	}
 
 	return gettime() - start;
@@ -1288,6 +1296,7 @@ void usage(const char *cmd) {
 		"	sid				Retrieve and output 128-bit SID key\n"
 		"	clear address length		Clear memory\n"
 		"	fill address length value	Fill memory\n"
+		"	wb72-watchdog			Handle Wiren Board 7.2 watchdog (toggle pin during op)\n"
 		, cmd);
 	printf("\n");
 	aw_fel_spiflash_help();
@@ -1480,6 +1489,8 @@ int main(int argc, char **argv)
 					      pflag_active ? progress_bar : NULL);
 			free(buf);
 			skip=3;
+		} else if (strcmp(argv[1], "wb72-watchdog") == 0) {
+			wb_watchdog_mode = WB_WATCHDOG_WB72;
 		} else {
 			pr_fatal("Invalid command %s\n", argv[1]);
 		}
